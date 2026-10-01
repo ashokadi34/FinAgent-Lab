@@ -110,10 +110,10 @@ response = client.responses.create(
     input=user_input
 )
 
-
 while True:
 
     tool_outputs = []
+    retrieved_transactions = None
 
     for item in response.output:
 
@@ -130,6 +130,15 @@ while True:
             arguments
         )
 
+        if (
+                item.name == "get_transactions"
+                and result.get("success") is True
+        ):
+            retrieved_transactions = result.get(
+                "transactions",
+                []
+            )
+
         print("Tool result:", result)
 
         tool_outputs.append(
@@ -145,7 +154,7 @@ while True:
 
     evidence_check = check_comparison_evidence(
         user_input,
-        comparison_available=False
+        retrieved_transactions or []
     )
 
     if not evidence_check["allowed"]:

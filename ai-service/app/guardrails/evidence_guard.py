@@ -1,3 +1,6 @@
+from datetime import datetime
+
+
 def requires_comparison(user_input: str) -> bool:
     """
     Determine whether the user's question requires
@@ -33,25 +36,63 @@ def requires_comparison(user_input: str) -> bool:
     )
 
 
+def get_transaction_periods(transactions: list) -> set:
+    """
+    Extract unique year-month periods from transaction dates.
+    """
+
+    periods = set()
+
+    for transaction in transactions:
+
+        transaction_date = transaction.get("date")
+
+        if not transaction_date:
+            continue
+
+        try:
+            date = datetime.strptime(
+                transaction_date,
+                "%Y-%m-%d"
+            )
+
+            periods.add(
+                (date.year, date.month)
+            )
+
+        except ValueError:
+            continue
+
+    return periods
+
+
 def check_comparison_evidence(
         user_input: str,
-        comparison_available: bool
+        transactions: list
 ) -> dict:
     """
-    Validate whether sufficient evidence exists
-    for a historical spending comparison.
+    Determine whether the available transaction data
+    contains enough evidence for a historical comparison.
+
+    Current implementation considers two or more distinct
+    calendar months as comparison evidence.
     """
 
     if not requires_comparison(user_input):
+
         return {
             "allowed": True,
             "reason": "Historical comparison is not required."
         }
 
-    if comparison_available:
+    periods = get_transaction_periods(transactions)
+
+    if len(periods) >= 2:
+
         return {
             "allowed": True,
-            "reason": "Comparison data is available."
+            "reason": "Multiple transaction periods are available.",
+            "periods": sorted(periods)
         }
 
     return {
@@ -59,5 +100,6 @@ def check_comparison_evidence(
         "reason": (
             "Historical comparison data is not available. "
             "A spending increase or decrease cannot be established."
-        )
+        ),
+        "periods": sorted(periods)
     }
