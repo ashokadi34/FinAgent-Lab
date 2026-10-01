@@ -9,6 +9,8 @@ from app.tools.financial_tools import (
     get_transactions
 )
 
+from app.guardrails.evidence_guard import check_comparison_evidence
+
 load_dotenv()
 
 client = OpenAI(
@@ -97,7 +99,7 @@ def execute_tool(name, arguments):
 
 
 user_input = (
-    "Why did my spending increase for account ACC001?"
+    "How much did I spend on food in account ACC001?"
 )
 
 
@@ -141,6 +143,19 @@ while True:
     if not tool_outputs:
         break
 
+    evidence_check = check_comparison_evidence(
+        user_input,
+        comparison_available=False
+    )
+
+    if not evidence_check["allowed"]:
+
+        print("\nEvidence Guard:")
+        print("BLOCKED:", evidence_check["reason"])
+
+        response = None
+        break
+
     response = client.responses.create(
         model="gpt-5.6-luna",
         previous_response_id=response.id,
@@ -149,5 +164,16 @@ while True:
     )
 
 
-print("\nFinal answer:")
-print(response.output_text)
+if response is not None:
+
+    print("\nFinal answer:")
+    print(response.output_text)
+
+else:
+
+    print("\nFinal answer:")
+    print(
+        "I cannot determine whether spending increased or "
+        "decreased because no historical comparison period "
+        "is available."
+    )
