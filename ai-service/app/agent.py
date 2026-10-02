@@ -22,6 +22,8 @@ from app.guardrails.spending_analyzer import (
     analyze_spending
 )
 
+from app.tools.payment_tools import create_payment_intent
+
 
 # ---------------------------------------------------------
 # Environment / OpenAI client
@@ -97,7 +99,44 @@ tools = [
             "additionalProperties": False
         },
         "strict": True
+    },
+
+    {
+        "type": "function",
+        "name": "create_payment_intent",
+        "description": (
+            "Create a financial payment intent after deterministic policy validation. "
+            "This does not execute or transfer money."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "account_id": {
+                    "type": "string",
+                    "description": "Source account ID"
+                },
+                "amount": {
+                    "type": "number",
+                    "description": "Payment amount"
+                },
+                "currency": {
+                    "type": "string",
+                    "description": "Payment currency such as INR, USD or SGD"
+                },
+                "beneficiary_id": {
+                    "type": "string",
+                    "description": "Beneficiary ID"
+                }
+            },
+            "required": [
+                "account_id",
+                "amount",
+                "currency",
+                "beneficiary_id"
+            ]
+        }
     }
+
 ]
 
 
@@ -105,21 +144,25 @@ tools = [
 # Tool executor
 # ---------------------------------------------------------
 
-def execute_tool(name, arguments):
+def execute_tool(tool_name, arguments):
 
-    if name == "get_balance":
-        return get_balance(
-            arguments["account_id"]
-        )
+    if tool_name == "get_balance":
+        return get_balance(arguments["account_id"])
 
-    if name == "get_transactions":
-        return get_transactions(
-            arguments["account_id"]
+    elif tool_name == "get_transactions":
+        return get_transactions(arguments["account_id"])
+
+    elif tool_name == "create_payment_intent":
+        return create_payment_intent(
+            account_id=arguments["account_id"],
+            amount=arguments["amount"],
+            currency=arguments["currency"],
+            beneficiary_id=arguments["beneficiary_id"]
         )
 
     return {
         "success": False,
-        "message": f"Unknown tool: {name}"
+        "message": f"Unknown tool: {tool_name}"
     }
 
 
@@ -128,7 +171,7 @@ def execute_tool(name, arguments):
 # ---------------------------------------------------------
 
 user_input = (
-    "Why did my spending increase for account ACC001?"
+    "Transfer ₹20,000 from ACC001 to beneficiary BEN001"
 )
 
 
