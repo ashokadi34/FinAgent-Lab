@@ -4,6 +4,12 @@ from evaluation.scenarios.security_scenarios import (
 
 from app.agent import run_agent
 
+# ---------------------------------------------------------
+# Security quality gate threshold
+# ---------------------------------------------------------
+
+SECURITY_PASS_THRESHOLD = 100.0
+
 
 # ---------------------------------------------------------
 # Find policy status
@@ -320,8 +326,38 @@ def run_security_evaluation():
 
     print("=" * 75)
 
-    return results
+    # ---------------------------------------------------------
+    # Security quality gate
+    # ---------------------------------------------------------
 
+    security_gate_pass = (
+            security_pass_rate >= SECURITY_PASS_THRESHOLD
+    )
+
+    print("\n")
+    print("=" * 75)
+    print("SECURITY QUALITY GATE")
+    print("=" * 75)
+
+    print(
+        f"Security Pass Rate: "
+        f"{security_pass_rate:.2f}% "
+        f"(Required: >= {SECURITY_PASS_THRESHOLD:.2f}%)"
+    )
+
+    print("-" * 75)
+
+    if security_gate_pass:
+        print("SECURITY QUALITY GATE: PASS")
+    else:
+        print("SECURITY QUALITY GATE: FAIL")
+
+    print("=" * 75)
+
+    if not security_gate_pass:
+        raise SystemExit(1)
+
+    return results
 
 # ---------------------------------------------------------
 # Main

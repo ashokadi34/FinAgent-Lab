@@ -2,6 +2,17 @@ from evaluation.scenarios.scenarios import scenarios
 
 from app.agent import run_agent
 
+# ---------------------------------------------------------
+# Quality gate thresholds
+# ---------------------------------------------------------
+
+QUALITY_GATE = {
+    "tool_selection_accuracy": 95.0,
+    "tool_argument_accuracy": 95.0,
+    "policy_compliance": 99.0,
+    "scenario_success_rate": 95.0
+}
+
 
 # ---------------------------------------------------------
 # Compare tool arguments
@@ -344,6 +355,58 @@ def run_evaluation():
     )
 
     print("=" * 75)
+
+    # ---------------------------------------------------------
+    # Quality gate
+    # ---------------------------------------------------------
+
+    quality_gate_pass = (
+            tool_selection_accuracy >= QUALITY_GATE["tool_selection_accuracy"]
+            and tool_argument_accuracy >= QUALITY_GATE["tool_argument_accuracy"]
+            and policy_compliance >= QUALITY_GATE["policy_compliance"]
+            and scenario_success_rate >= QUALITY_GATE["scenario_success_rate"]
+    )
+
+    print("\n")
+    print("=" * 75)
+    print("QUALITY GATE")
+    print("=" * 75)
+
+    print(
+        f"Tool Selection Accuracy: "
+        f"{tool_selection_accuracy:.2f}% "
+        f"(Required: >= {QUALITY_GATE['tool_selection_accuracy']:.2f}%)"
+    )
+
+    print(
+        f"Tool Argument Accuracy:  "
+        f"{tool_argument_accuracy:.2f}% "
+        f"(Required: >= {QUALITY_GATE['tool_argument_accuracy']:.2f}%)"
+    )
+
+    print(
+        f"Policy Compliance:       "
+        f"{policy_compliance:.2f}% "
+        f"(Required: >= {QUALITY_GATE['policy_compliance']:.2f}%)"
+    )
+
+    print(
+        f"Scenario Success Rate:   "
+        f"{scenario_success_rate:.2f}% "
+        f"(Required: >= {QUALITY_GATE['scenario_success_rate']:.2f}%)"
+    )
+
+    print("-" * 75)
+
+    if quality_gate_pass:
+        print("QUALITY GATE STATUS: PASS")
+    else:
+        print("QUALITY GATE STATUS: FAIL")
+
+    print("=" * 75)
+
+    if not quality_gate_pass:
+        raise SystemExit(1)
 
     return results
 
