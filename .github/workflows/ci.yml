@@ -1,0 +1,53 @@
+name: FinAgent Lab CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  test-and-evaluate:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: ai-service
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile Python modules
+        working-directory: ai-service
+        run: |
+          python -m py_compile app/agent.py
+          python -m py_compile evaluation/evaluator.py
+          python -m py_compile evaluation/security_evaluator.py
+          python -m py_compile evaluation/scenarios/scenarios.py
+          python -m py_compile evaluation/scenarios/security_scenarios.py
+
+      - name: Run agent evaluation
+        working-directory: ai-service
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python -m evaluation.evaluator
+
+      - name: Run security evaluation
+        working-directory: ai-service
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python -m evaluation.security_evaluator
