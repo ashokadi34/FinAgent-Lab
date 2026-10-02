@@ -1,5 +1,44 @@
 transactions = {
     "ACC001": [
+
+        {
+            "transaction_id": "TXN-AUG-001",
+            "date": "2026-08-01",
+            "description": "Grocery Store",
+            "category": "Food",
+            "amount": 1800.00,
+            "currency": "INR",
+            "type": "DEBIT"
+        },
+        {
+            "transaction_id": "TXN-AUG-002",
+            "date": "2026-08-03",
+            "description": "Uber",
+            "category": "Transport",
+            "amount": 400.00,
+            "currency": "INR",
+            "type": "DEBIT"
+        },
+        {
+            "transaction_id": "TXN-AUG-003",
+            "date": "2026-08-05",
+            "description": "Amazon",
+            "category": "Shopping",
+            "amount": 2200.00,
+            "currency": "INR",
+            "type": "DEBIT"
+        },
+        {
+            "transaction_id": "TXN-AUG-004",
+            "date": "2026-08-08",
+            "description": "Restaurant",
+            "category": "Food",
+            "amount": 1000.00,
+            "currency": "INR",
+            "type": "DEBIT"
+        },
+
+
         {
             "transaction_id": "TXN001",
             "date": "2026-09-01",

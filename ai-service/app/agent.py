@@ -9,7 +9,23 @@ from app.tools.financial_tools import (
     get_transactions
 )
 
-from app.guardrails.evidence_guard import check_comparison_evidence
+from app.guardrails.evidence_guard import (
+    check_comparison_evidence,
+    requires_comparison
+)
+
+from app.guardrails.spending_comparator import (
+    compare_latest_periods
+)
+
+from app.guardrails.spending_analyzer import (
+    analyze_spending
+)
+
+
+# ---------------------------------------------------------
+# Environment / OpenAI client
+# ---------------------------------------------------------
 
 load_dotenv()
 
@@ -17,10 +33,10 @@ client = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY")
 )
 
-# Grounding instructions improve model behavior but are not
-# a deterministic enforcement mechanism.
-# Deterministic evidence and policy validation will be added
-# in a later stage of FinAgent Lab.
+
+# ---------------------------------------------------------
+# Agent grounding instructions
+# ---------------------------------------------------------
 
 AGENT_INSTRUCTIONS = """
 You are a financial assistant for FinAgent Lab.
@@ -40,7 +56,12 @@ Follow these rules carefully:
 11. If a user asks why spending increased or decreased and no comparison period exists, explicitly say that the change cannot be determined.
 12. Do not use phrases such as "the increase", "the decrease", "increased because", "decreased because", "driven by the increase", or similar causal language when comparison data is unavailable.
 13. When comparison data is unavailable, describe only the spending observed in the available transactions and clearly state that a trend cannot be established.
-""" 
+"""
+
+
+# ---------------------------------------------------------
+# Financial tools available to the agent
+# ---------------------------------------------------------
 
 tools = [
     {
@@ -80,6 +101,10 @@ tools = [
 ]
 
 
+# ---------------------------------------------------------
+# Tool executor
+# ---------------------------------------------------------
+
 def execute_tool(name, arguments):
 
     if name == "get_balance":
@@ -98,10 +123,18 @@ def execute_tool(name, arguments):
     }
 
 
+# ---------------------------------------------------------
+# User request
+# ---------------------------------------------------------
+
 user_input = (
-    "How much did I spend on food in account ACC001?"
+    "Why did my spending increase for account ACC001?"
 )
 
+
+# ---------------------------------------------------------
+# Step 1 — Initial LLM request
+# ---------------------------------------------------------
 
 response = client.responses.create(
     model="gpt-5.6-luna",
@@ -110,75 +143,82 @@ response = client.responses.create(
     input=user_input
 )
 
-while True:
 
-    tool_outputs = []
-    retrieved_transactions = None
+# ---------------------------------------------------------
+# Step 2 — Process requested tools
+#
+# We intentionally handle the current agent as a single
+# tool-resolution cycle.
+#
+# This prevents accidental infinite tool loops while we
+# build the core FinAgent Lab architecture.
+# ---------------------------------------------------------
 
-    for item in response.output:
+tool_outputs = []
 
-        if item.type != "function_call":
-            continue
+retrieved_transactions = []
 
-        print("LLM requested tool:", item.name)
-        print("Arguments:", item.arguments)
+for item in response.output:
 
-        arguments = json.loads(item.arguments)
+    if item.type != "function_call":
+        continue
 
-        result = execute_tool(
-            item.name,
-            arguments
-        )
+    print("LLM requested tool:", item.name)
+    print("Arguments:", item.arguments)
 
-        if (
-                item.name == "get_transactions"
-                and result.get("success") is True
-        ):
-            retrieved_transactions = result.get(
-                "transactions",
-                []
-            )
+    arguments = json.loads(item.arguments)
 
-        print("Tool result:", result)
-
-        tool_outputs.append(
-            {
-                "type": "function_call_output",
-                "call_id": item.call_id,
-                "output": json.dumps(result)
-            }
-        )
-
-    if not tool_outputs:
-        break
-
-    evidence_check = check_comparison_evidence(
-        user_input,
-        retrieved_transactions or []
+    result = execute_tool(
+        item.name,
+        arguments
     )
 
-    if not evidence_check["allowed"]:
+    print("Tool result:", result)
 
-        print("\nEvidence Guard:")
-        print("BLOCKED:", evidence_check["reason"])
+    # Capture transactions for deterministic analysis.
+    if (
+            item.name == "get_transactions"
+            and result.get("success") is True
+    ):
+        retrieved_transactions = result.get(
+            "transactions",
+            []
+        )
 
-        response = None
-        break
-
-    response = client.responses.create(
-        model="gpt-5.6-luna",
-        previous_response_id=response.id,
-        tools=tools,
-        input=tool_outputs
+    tool_outputs.append(
+        {
+            "type": "function_call_output",
+            "call_id": item.call_id,
+            "output": json.dumps(result)
+        }
     )
 
 
-if response is not None:
+# ---------------------------------------------------------
+# Step 3 — No tool call
+# ---------------------------------------------------------
+
+if not tool_outputs:
 
     print("\nFinal answer:")
     print(response.output_text)
 
-else:
+    raise SystemExit
+
+
+# ---------------------------------------------------------
+# Step 4 — Evidence Guard
+# ---------------------------------------------------------
+
+evidence_check = check_comparison_evidence(
+    user_input,
+    retrieved_transactions
+)
+
+if not evidence_check["allowed"]:
+
+    print("\nEvidence Guard:")
+    print("BLOCKED:", evidence_check["reason"])
 
     print("\nFinal answer:")
     print(
@@ -186,3 +226,145 @@ else:
         "decreased because no historical comparison period "
         "is available."
     )
+
+    raise SystemExit
+
+
+# ---------------------------------------------------------
+# Step 5 — Deterministic Spending Analysis
+# ---------------------------------------------------------
+
+spending_analysis = None
+
+if retrieved_transactions:
+
+    spending_analysis = analyze_spending(
+        retrieved_transactions
+    )
+
+    print("\nDeterministic Spending Analysis:")
+    print(spending_analysis)
+
+
+# ---------------------------------------------------------
+# Step 6 — Deterministic Spending Comparison
+# ---------------------------------------------------------
+
+comparison_result = None
+
+if (
+        retrieved_transactions
+        and requires_comparison(user_input)
+):
+
+    comparison_result = compare_latest_periods(
+        retrieved_transactions
+    )
+
+    print("\nDeterministic Spending Comparison:")
+    print(comparison_result)
+
+
+# ---------------------------------------------------------
+# Step 7 — Prepare trusted information for final LLM
+# ---------------------------------------------------------
+
+next_input = list(tool_outputs)
+
+
+# ---------------------------------------------------------
+# Add trusted spending analysis
+# ---------------------------------------------------------
+
+if (
+        spending_analysis
+        and spending_analysis.get("success") is True
+        and spending_analysis.get("analysis")
+):
+
+    trusted_analysis = spending_analysis["analysis"]
+
+    next_input.append(
+        {
+            "role": "developer",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": (
+                        "Trusted deterministic spending analysis:\n"
+                        f"{json.dumps(trusted_analysis)}\n\n"
+                        "Use this analysis as the authoritative "
+                        "source for spending totals, category totals, "
+                        "largest expense, and transaction count. "
+                        "Do not recalculate or alter these financial "
+                        "values."
+                    )
+                }
+            ]
+        }
+    )
+
+
+# ---------------------------------------------------------
+# Add trusted spending comparison
+# ---------------------------------------------------------
+
+if (
+        comparison_result
+        and comparison_result.get("success") is True
+):
+
+    trusted_comparison = comparison_result["comparison"]
+
+    next_input.append(
+        {
+            "role": "developer",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": (
+                        "Trusted deterministic financial "
+                        "comparison result:\n"
+                        f"{json.dumps(trusted_comparison)}\n\n"
+                        "Use this deterministic result when "
+                        "answering the user's comparison "
+                        "question. Do not recalculate, "
+                        "modify, or contradict the financial "
+                        "values."
+                    )
+                }
+            ]
+        }
+    )
+
+
+# ---------------------------------------------------------
+# Step 8 — Final LLM pass
+#
+# IMPORTANT:
+# tools=[] prevents the LLM from calling the financial
+# tools again.
+#
+# At this point:
+#
+# LLM → understands the question
+# Tool → retrieves raw financial data
+# Python → performs deterministic analysis
+# Guardrail → validates evidence
+# LLM → explains the trusted result
+# ---------------------------------------------------------
+
+final_response = client.responses.create(
+    model="gpt-5.6-luna",
+    previous_response_id=response.id,
+    tools=[],
+    input=next_input
+)
+
+
+# ---------------------------------------------------------
+# Step 9 — Final answer
+# ---------------------------------------------------------
+
+print("\nFinal answer:")
+print(final_response.output_text)
